@@ -51,7 +51,9 @@ class ProactiveActionPlugin(star.Star):
 
     async def initialize(self) -> None:
         """异步初始化：读取配置，构建组件。"""
-        self._plugin_config = dict(self.config) if self.config else {}
+        # AstrBotConfig 本身支持 .get()，直接使用；dict() 包装在部分版本会把 config 当字符串迭代
+        cfg = self.config
+        self._plugin_config = cfg if isinstance(cfg, dict) else (dict(cfg) if hasattr(cfg, 'keys') else {})
 
         self.tool_registry = ToolRegistry(self.context)
         self.classifier = IntentClassifier(

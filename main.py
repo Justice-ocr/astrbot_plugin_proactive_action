@@ -20,6 +20,9 @@ from .core.dispatcher import ActionDispatcher
 from .core.tool_registry import ToolRegistry
 from .executors.image_executor import ImageExecutor
 
+_HANDLER_FULL_NAME = "astrbot_plugin_proactive_action.main_on_decorating_result"
+_MODULE_PATH = "astrbot_plugin_proactive_action.main"
+
 
 class ProactiveActionPlugin(star.Star):
     """主动动作附属插件。"""
@@ -47,35 +50,79 @@ class ProactiveActionPlugin(star.Star):
 
         # 向 star_handlers_registry 手动注册 OnDecoratingResultEvent handler
         try:
-            from astrbot.core.star.star_handler import EventType, star_handlers_registry
-            plugin_self = self
+            from astrbot.core.star.star_handler import (
+                EventType,
+                StarHandlerMetadata,
+                star_handlers_registry,
+            )
+            from astrbot.core.star.star import star_map, StarMetadata
 
-            class _DecoratingHandler:
-                handler_full_name = "astrbot_plugin_proactive_action.on_decorating_result"
-                handler_module_path = "astrbot_plugin_proactive_action.main"
+            # 确保本插件在 star_map 中有记录，否则 only_activated 检查会过滤掉 handler
+            if _MODULE_PATH not in star_map:
+                meta = StarMetadata(
+                    name="astrbot_plugin_proactive_action",
+                    author="Justice-ocr",
+                    desc="主动动作附属插件",
+                    version="1.0.0",
+                    repo="",
+                    star_cls_type=type(self),
+                    reserved=False,
+                )
+                meta.activated = True
+                star_map[_MODULE_PATH] = meta
+            else:
+                star_map[_MODULE_PATH].activated = True
 
-                async def handler(self_h, event):
+            # 去重检查
+            existing = star_handlers_registry.get_handlers_by_event_type(
+                EventType.OnDecoratingResultEvent,
+                only_activated=False,
+            )
+            already = any(h.handler_full_name == _HANDLER_FULL_NAME for h in existing)
+
+            if not already:
+                plugin_self = self
+
+                async def _handler(event: AstrMessageEvent) -> None:
                     await plugin_self._on_decorating_result_impl(event)
 
-            existing = star_handlers_registry.get_handlers_by_event_type(
-                EventType.OnDecoratingResultEvent
-            )
-            already = any(
-                getattr(h, "handler_full_name", "") == _DecoratingHandler.handler_full_name
-                for h in existing
-            )
-            if not already:
-                star_handlers_registry.add_handler(
-                    EventType.OnDecoratingResultEvent,
-                    _DecoratingHandler(),
+                metadata = StarHandlerMetadata(
+                    event_type=EventType.OnDecoratingResultEvent,
+                    handler_full_name=_HANDLER_FULL_NAME,
+                    handler_name="on_decorating_result",
+                    handler_module_path=_MODULE_PATH,
+                    handler=_handler,
+                    event_filters=[],
+                    desc="proactive_action: 拦截出站消息并执行动作指令",
                 )
+                star_handlers_registry.append(metadata)
                 logger.info("[proactive_action] OnDecoratingResultEvent handler 注册成功。")
+            else:
+                logger.info("[proactive_action] OnDecoratingResultEvent handler 已存在，跳过注册。")
+
         except Exception as e:
             logger.warning(f"[proactive_action] 注册 OnDecoratingResultEvent handler 失败: {e}")
 
         logger.info("[proactive_action] 初始化完成。")
 
     async def terminate(self) -> None:
+        # 卸载时清理注册的 handler
+        try:
+            from astrbot.core.star.star_handler import (
+                EventType,
+                star_handlers_registry,
+            )
+            existing = star_handlers_registry.get_handlers_by_event_type(
+                EventType.OnDecoratingResultEvent,
+                only_activated=False,
+            )
+            for h in existing:
+                if h.handler_full_name == _HANDLER_FULL_NAME:
+                    star_handlers_registry.remove(h)
+                    logger.info("[proactive_action] OnDecoratingResultEvent handler 已清理。")
+                    break
+        except Exception as e:
+            logger.debug(f"[proactive_action] 清理 handler 失败（忽略）: {e}")
         logger.info("[proactive_action] 插件已卸载。")
 
     async def _on_decorating_result_impl(self, event: AstrMessageEvent) -> None:
@@ -115,7 +162,6 @@ class ProactiveActionPlugin(star.Star):
         for i, t in enumerate(tools, 1):
             name = t.get("name", "?")
             desc = t.get("description", "").strip()
-            # 截断过长的描述
             if len(desc) > 60:
                 desc = desc[:57] + "..."
             lines.append(f"{i}. {name}\n   {desc}" if desc else f"{i}. {name}")
@@ -147,4 +193,3 @@ class ProactiveActionPlugin(star.Star):
                 await event.send(event.chain_result([img]))
         except Exception as e:
             logger.warning(f"[proactive_action] 后台生图发送失败: {e}")
-

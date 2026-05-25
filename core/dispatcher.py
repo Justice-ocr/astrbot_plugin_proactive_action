@@ -105,7 +105,7 @@ class ActionDispatcher:
 
         # 4. 注入工具执行结果
         if extra_component is not None:
-            mode = self.config.get("image_generation_mode", "before")
+            mode = self.config.get("image_config", {}).get("image_generation_mode", "before")
             if mode == "before":
                 new_chain = [extra_component] + new_chain
             else:
@@ -133,3 +133,4 @@ class ActionDispatcher:
         if not text or Plain is None:
             return None
         return Plain(text=text)
+

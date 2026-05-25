@@ -29,15 +29,35 @@ _LOOSE_IMAGE_RE = re.compile(
     re.DOTALL,
 )
 
+# LLM 二次分析的 system prompt
+_AI_ANALYSIS_SYSTEM = "你是消息动作分析器，只输出JSON，不解释，不输出任何其他内容。"
+
+# LLM 二次分析的 prompt 模板
+_AI_ANALYSIS_PROMPT = """\
+以下是一条 Bot 发出的消息文本：
+
+[{text}]
+
+请判断这条消息中是否隐含了需要执行的动作（例如：发送图片、搜索信息、查询天气等）。
+
+判断标准：
+- 消息中描述了 Bot "发来/分享/附上/展示" 某张图片、某个内容，但实际并未附带（即用文字描述了一个动作但没有执行）
+- 消息语义上暗示应该配合图片或其他媒体内容
+- 如果消息只是普通文字对话、问候、感想，不含任何动作意图，则 action 填 null
+
+只输出如下 JSON，不要任何其他内容：
+{{"action": "generate_image" | null, "param": "生图描述（如action为null则填null）", "clean_text": "去掉动作描述后的剩余文本（如无则与原文相同）"}}
+"""
+
 
 class IntentClassifier:
     """意图分类器。
 
-    两段式设计：
+    三段式设计：
     1. 规则快速通道（零延迟）：正则匹配「动作括号」，直接提取 prompt
-    2. LLM 慢通道（可选）：对无法规则匹配但语义上可能含有动作的文本做兜底分类
-       - 开销大，默认只在规则失败时启用
-       - 通过配置 classifier_provider_id 控制
+    2. AI 二次分析通道（bot_outgoing 专用）：规则失败后用 LLM 分析 Bot 发出的
+       消息，判断是否隐含动作意图，需要则调工具，不需要则静默
+    3. LLM 慢通道（incoming 专用）：对用户来消息做兜底意图分类
     """
 
     # 工具名到执行器类型的映射（从 LLM 返回的 action 字段）
@@ -64,19 +84,23 @@ class IntentClassifier:
             "action": "image",          # 动作类型
             "param": "具体的生图描述",   # 执行参数
             "clean_text": "去掉指令后的文本",  # 净化后的原文
-            "method": "rule" | "llm",   # 命中路径
+            "method": "rule" | "llm" | "ai_analysis",  # 命中路径
         }
         """
-        # 快速规则通道
+        # 快速规则通道（所有来源都先走）
         result = self._rule_classify(text)
         if result:
             return result
 
-        # 没有规则命中 → 是否启用 LLM 慢通道
-        # 对于 bot_outgoing（主动消息），规则失败基本说明无动作，不再消耗 LLM
-        # 对于 incoming（用户消息），可考虑 LLM 扫描（由 scan_incoming 配置控制）
-        if source == "incoming" and self.config.get("tool_scan_enabled", False):
-            return await self._llm_classify(text)
+        if source == "bot_outgoing":
+            # Bot 出站消息：规则失败后走 AI 二次分析
+            if self.config.get("enable_ai_analysis", True):
+                return await self._ai_analysis_classify(text)
+
+        elif source == "incoming":
+            # 用户来消息：走原有 LLM 慢通道
+            if self.config.get("tool_scan_enabled", False):
+                return await self._llm_classify(text)
 
         return None
 
@@ -103,14 +127,11 @@ class IntentClassifier:
         for m in _FAST_IMAGE_RE.finditer(text):
             raw = m.group(0)
             inner = raw.strip("（()）").strip()
-            # 去掉动词前缀
             inner = re.sub(
                 r"^(?:发来|发了|分享|分享了|放了|附上|配上|发出|发送|递来|递了)(?:了)?[一]?[张幅]?",
                 "", inner,
             ).strip()
-            # 去掉末尾"语气XXX"等非图像描述性词
             inner = re.sub(r"[，,。\s]*语气\S+$", "", inner).strip("，,。 \t")
-            # 去掉末尾括号内的说明（逗号后内容）
             inner = re.sub(r"[，,][^，,]{0,30}$", "", inner).strip("，,。 \t")
             if len(inner) < 3:
                 continue
@@ -138,14 +159,75 @@ class IntentClassifier:
 
         return None
 
-    # ── LLM 慢通道 ────────────────────────────────────────────────────────
+    # ── AI 二次分析通道（bot_outgoing 专用）────────────────────────────────
 
-    async def _llm_classify(self, text: str) -> dict | None:
-        """用 LLM 做意图分类（慢通道，仅在规则失败且启用时调用）。"""
+    async def _ai_analysis_classify(self, text: str) -> dict | None:
+        """用 LLM 分析 Bot 发出的消息，判断是否隐含动作意图。
+
+        这是针对主动消息的专用通道：规则没有捕获到明确的括号指令，
+        但文本语义上可能暗示了需要配合图片等内容，由 LLM 来判断。
+        不需要动作时静默返回 None，不影响消息发出。
+        """
         try:
             provider_id = (self.config.get("classifier_provider_id") or "").strip()
 
-            # 构建工具提示（动态扫描已注册工具）
+            prompt = _AI_ANALYSIS_PROMPT.format(text=text)
+
+            kwargs: dict[str, Any] = {
+                "system_prompt": _AI_ANALYSIS_SYSTEM,
+                "prompt": prompt,
+            }
+            if provider_id:
+                kwargs["chat_provider_id"] = provider_id
+
+            response = await self.context.llm_generate(**kwargs)
+            raw = (getattr(response, "completion_text", None) or "").strip()
+
+            # 清理 markdown 代码块
+            raw = re.sub(r"^```(?:json)?\s*", "", raw)
+            raw = re.sub(r"\s*```$", "", raw).strip()
+
+            parsed = json.loads(raw)
+            action_raw = str(parsed.get("action") or "").lower()
+
+            # action 为 null / 空 → 静默，不做任何事
+            if not action_raw or action_raw == "null":
+                logger.debug("[proactive_action] AI 二次分析：无需调用工具，静默放行")
+                return None
+
+            action = self.ACTION_MAP.get(action_raw)
+            if not action:
+                logger.debug(f"[proactive_action] AI 二次分析：未知 action={action_raw}，静默放行")
+                return None
+
+            param = str(parsed.get("param") or "").strip()
+            if not param or param.lower() == "null":
+                return None
+
+            clean_text = str(parsed.get("clean_text") or text).strip()
+
+            logger.info(
+                f"[proactive_action] AI 二次分析命中: action={action}, "
+                f"param={param[:50]}"
+            )
+            return {
+                "action": action,
+                "param": param,
+                "clean_text": clean_text,
+                "method": "ai_analysis",
+            }
+
+        except Exception as e:
+            logger.debug(f"[proactive_action] AI 二次分析失败（静默降级）: {e}")
+            return None
+
+    # ── LLM 慢通道（incoming 专用）───────────────────────────────────────
+
+    async def _llm_classify(self, text: str) -> dict | None:
+        """用 LLM 做意图分类（慢通道，仅用于用户来消息）。"""
+        try:
+            provider_id = (self.config.get("classifier_provider_id") or "").strip()
+
             tool_hints = ""
             if self.config.get("tool_scan_enabled", False):
                 tools = self.tool_registry.get_all_tools()
@@ -172,7 +254,6 @@ class IntentClassifier:
             response = await self.context.llm_generate(**kwargs)
             raw = (getattr(response, "completion_text", None) or "").strip()
 
-            # 清理 markdown 代码块
             raw = re.sub(r"^```(?:json)?\s*", "", raw)
             raw = re.sub(r"\s*```$", "", raw).strip()
 

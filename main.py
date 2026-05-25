@@ -1,9 +1,4 @@
-"""astrbot_plugin_proactive_action — 主动动作附属插件。
-
-通过 OnDecoratingResultEvent 钩子拦截所有出站消息（含主动回复插件发出的主动消息），
-识别文本中内嵌的动作指令（如「（发来一张XXX）」），自动调用对应工具执行并将结果
-注入消息链，实现多模态对话体验。
-"""
+"""astrbot_plugin_proactive_action — 主动动作附属插件。"""
 
 from __future__ import annotations
 
@@ -24,7 +19,7 @@ from .executors.image_executor import ImageExecutor
 @star.register(
     name="astrbot_plugin_proactive_action",
     desc="监测所有出站消息，自动识别并执行动作指令（生图等），实现多模态对话体验。",
-    version="1.0.1",
+    version="1.0.2",
     author="Justice-ocr",
 )
 class ProactiveActionPlugin(star.Star):
@@ -40,7 +35,6 @@ class ProactiveActionPlugin(star.Star):
         logger.info("[proactive_action] 插件实例已创建。")
 
     async def initialize(self) -> None:
-        # 兼容所有版本 AstrBotConfig：直接用原对象（支持 .get()），不做 dict() 包装
         cfg = self.config
         if not hasattr(cfg, 'get'):
             cfg = {}
@@ -51,11 +45,8 @@ class ProactiveActionPlugin(star.Star):
         self.image_executor = ImageExecutor(self.tool_registry)
         self.dispatcher = ActionDispatcher(self._plugin_config, self.classifier, self.image_executor)
 
-        # 向 star_handlers_registry 手动注册 OnDecoratingResultEvent handler
-        # 这是最兼容的方式，不依赖 @filter.on_decorating_result() 装饰器是否存在
         try:
             from astrbot.core.star.star_handler import EventType, star_handlers_registry
-
             plugin_self = self
 
             class _DecoratingHandler:
@@ -65,7 +56,6 @@ class ProactiveActionPlugin(star.Star):
                 async def handler(self_h, event):
                     await plugin_self._on_decorating_result_impl(event)
 
-            # 避免重复注册（重载时）
             existing = star_handlers_registry.get_handlers_by_event_type(
                 EventType.OnDecoratingResultEvent
             )
@@ -79,8 +69,6 @@ class ProactiveActionPlugin(star.Star):
                     _DecoratingHandler(),
                 )
                 logger.info("[proactive_action] OnDecoratingResultEvent handler 注册成功。")
-            else:
-                logger.debug("[proactive_action] OnDecoratingResultEvent handler 已存在，跳过注册。")
         except Exception as e:
             logger.warning(f"[proactive_action] 注册 OnDecoratingResultEvent handler 失败: {e}")
 
@@ -88,8 +76,6 @@ class ProactiveActionPlugin(star.Star):
 
     async def terminate(self) -> None:
         logger.info("[proactive_action] 插件已卸载。")
-
-    # ── 核心处理逻辑 ─────────────────────────────────────────────────────
 
     async def _on_decorating_result_impl(self, event: AstrMessageEvent) -> None:
         if not self._plugin_config.get("enable", True):
@@ -110,11 +96,8 @@ class ProactiveActionPlugin(star.Star):
         except Exception as e:
             logger.error(f"[proactive_action] on_decorating_result 异常（已忽略）: {e}")
 
-    # ── 可选：扫描用户来消息 ──────────────────────────────────────────────
-
-    @filter.event_message_type(filter.EventMessageType.ALL, priority=100)
     async def on_incoming_message(self, event: AstrMessageEvent) -> None:
-        """可选：扫描用户发来的消息（需配置 scan_incoming=true）。"""
+        """扫描用户发来的消息（需配置 scan_incoming=true）。"""
         if not self._plugin_config.get("scan_incoming", False):
             return
         if self.dispatcher is None or self.classifier is None:
@@ -123,9 +106,7 @@ class ProactiveActionPlugin(star.Star):
         if not text:
             return
         intent = await self.classifier.classify(text, source="incoming")
-        if not intent:
-            return
-        if intent.get("action") != "image" or not intent.get("param"):
+        if not intent or intent.get("action") != "image" or not intent.get("param"):
             return
         asyncio.create_task(self._send_generated_image(event, intent["param"]))
 

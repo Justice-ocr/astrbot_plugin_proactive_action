@@ -1,48 +1,38 @@
 {
-  "type": "object",
-  "properties": {
-    "enable": {
-      "type": "boolean",
-      "description": "是否启用主动动作插件",
-      "default": true,
-      "title": "启用插件"
-    },
-    "classifier_provider_id": {
-      "type": "string",
-      "description": "用于意图分类的 AstrBot LLM Provider ID（留空则自动使用当前默认 Provider）。轻量模型即可，无需高性能。",
-      "default": "",
-      "title": "意图分类 Provider"
-    },
-    "enable_image_generation": {
-      "type": "boolean",
-      "description": "是否启用生图动作（需要已安装并配置 astrbot_plugin_aiimg_enhanced）",
-      "default": true,
-      "title": "启用生图动作"
-    },
-    "image_generation_mode": {
-      "type": "string",
-      "description": "生图发送顺序：before=先图后文（默认，模拟\"发来一张\"的自然感），after=先文后图",
-      "default": "before",
-      "enum": ["before", "after"],
-      "title": "图文顺序"
-    },
-    "scan_incoming": {
-      "type": "boolean",
-      "description": "是否同时扫描用户发来的消息（不只扫描 Bot 的出站消息）",
-      "default": false,
-      "title": "扫描用户消息"
-    },
-    "action_pattern": {
-      "type": "string",
-      "description": "自定义动作指令正则（留空使用内置规则）。内置规则匹配「（发来/分享/放了 一张 ...）」等中文括号动作描述。",
-      "default": "",
-      "title": "自定义匹配规则"
-    },
-    "tool_scan_enabled": {
-      "type": "boolean",
-      "description": "是否自动扫描 AstrBot 全部已注册 LLM 工具并在意图分类时动态提示（实验性功能）",
-      "default": false,
-      "title": "动态工具扫描（实验性）"
-    }
+  "enable": {
+    "type": "bool",
+    "description": "是否启用主动动作插件",
+    "default": true
+  },
+  "classifier_provider_id": {
+    "type": "string",
+    "description": "意图分类 LLM Provider ID（留空使用当前默认 Provider）",
+    "default": ""
+  },
+  "enable_image_generation": {
+    "type": "bool",
+    "description": "是否启用生图动作（需已安装 astrbot_plugin_aiimg_enhanced）",
+    "default": true
+  },
+  "image_generation_mode": {
+    "type": "string",
+    "description": "图文顺序：before=先图后文，after=先文后图",
+    "options": ["before", "after"],
+    "default": "before"
+  },
+  "scan_incoming": {
+    "type": "bool",
+    "description": "是否同时扫描用户发来的消息",
+    "default": false
+  },
+  "action_pattern": {
+    "type": "string",
+    "description": "自定义动作匹配正则（留空使用内置规则）",
+    "default": ""
+  },
+  "tool_scan_enabled": {
+    "type": "bool",
+    "description": "动态扫描全部已注册 LLM 工具（实验性）",
+    "default": false
   }
 }

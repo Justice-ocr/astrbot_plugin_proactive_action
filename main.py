@@ -1,4 +1,9 @@
-"""astrbot_plugin_proactive_action — 主动动作附属插件。"""
+"""astrbot_plugin_proactive_action — 主动动作附属插件。
+
+通过 OnDecoratingResultEvent 钩子拦截所有出站消息（含主动回复插件发出的主动消息），
+识别文本中内嵌的动作指令（如「（发来一张XXX）」），自动调用对应工具执行并将结果
+注入消息链，实现多模态对话体验。
+"""
 
 from __future__ import annotations
 
@@ -16,13 +21,8 @@ from .core.tool_registry import ToolRegistry
 from .executors.image_executor import ImageExecutor
 
 
-@star.register(
-    name="astrbot_plugin_proactive_action",
-    desc="监测所有出站消息，自动识别并执行动作指令（生图等），实现多模态对话体验。",
-    version="1.0.2",
-    author="Justice-ocr",
-)
 class ProactiveActionPlugin(star.Star):
+    """主动动作附属插件。"""
 
     def __init__(self, context: star.Context, config: AstrBotConfig) -> None:
         super().__init__(context)
@@ -45,6 +45,7 @@ class ProactiveActionPlugin(star.Star):
         self.image_executor = ImageExecutor(self.tool_registry)
         self.dispatcher = ActionDispatcher(self._plugin_config, self.classifier, self.image_executor)
 
+        # 向 star_handlers_registry 手动注册 OnDecoratingResultEvent handler
         try:
             from astrbot.core.star.star_handler import EventType, star_handlers_registry
             plugin_self = self

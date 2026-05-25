@@ -126,7 +126,7 @@ class ProactiveActionPlugin(star.Star):
 
     async def on_incoming_message(self, event: AstrMessageEvent) -> None:
         """扫描用户发来的消息（需配置 scan_incoming=true）。"""
-        if not self._plugin_config.get("scan_incoming", False):
+        if not self._plugin_config.get("incoming_config", {}).get("scan_incoming", False):
             return
         if self.dispatcher is None or self.classifier is None:
             return
@@ -147,3 +147,4 @@ class ProactiveActionPlugin(star.Star):
                 await event.send(event.chain_result([img]))
         except Exception as e:
             logger.warning(f"[proactive_action] 后台生图发送失败: {e}")
+

@@ -97,6 +97,33 @@ class ProactiveActionPlugin(star.Star):
         except Exception as e:
             logger.error(f"[proactive_action] on_decorating_result 异常（已忽略）: {e}")
 
+    @filter.command("pa_tools", alias={"proactive_tools", "动作工具列表"})
+    async def cmd_list_tools(self, event: AstrMessageEvent) -> None:
+        """列出当前 AstrBot 已注册的全部 LLM 工具。"""
+        if self.tool_registry is None:
+            yield event.plain_result("插件尚未初始化，请稍后再试。")
+            return
+
+        self.tool_registry.invalidate_cache()
+        tools = self.tool_registry.get_all_tools()
+
+        if not tools:
+            yield event.plain_result("⚠️ 未找到任何已注册的 LLM 工具。")
+            return
+
+        lines = [f"🔧 已注册 LLM 工具（共 {len(tools)} 个）\n━━━━━━━━━━━━━━"]
+        for i, t in enumerate(tools, 1):
+            name = t.get("name", "?")
+            desc = t.get("description", "").strip()
+            # 截断过长的描述
+            if len(desc) > 60:
+                desc = desc[:57] + "..."
+            lines.append(f"{i}. {name}\n   {desc}" if desc else f"{i}. {name}")
+
+        yield event.plain_result("\n".join(lines))
+        event.stop_event()
+        event.should_call_llm(True)
+
     async def on_incoming_message(self, event: AstrMessageEvent) -> None:
         """扫描用户发来的消息（需配置 scan_incoming=true）。"""
         if not self._plugin_config.get("scan_incoming", False):

@@ -5,43 +5,61 @@
     "default": true
   },
 
-  "enable_image_generation": {
-    "type": "bool",
-    "description": "【生图】是否启用生图动作（需已安装 astrbot_plugin_aiimg_enhanced）",
-    "default": true
-  },
-  "image_generation_mode": {
-    "type": "string",
-    "description": "【生图】图文顺序：before=先图后文，after=先文后图",
-    "options": ["before", "after"],
-    "default": "before"
-  },
-  "action_pattern": {
-    "type": "string",
-    "description": "【生图】自定义动作匹配正则（留空使用内置规则）",
-    "default": ""
-  },
-
-  "enable_ai_analysis": {
-    "type": "bool",
-    "description": "【主动消息 AI 分析】规则未命中时，用 LLM 判断主动消息是否隐含动作意图，不需要则静默",
-    "default": true
-  },
-  "classifier_provider_id": {
-    "type": "string",
-    "description": "【主动消息 AI 分析】意图分析使用的 LLM Provider（留空使用当前默认 Provider，建议选择轻量快速的模型）",
-    "default": "",
-    "_special": "select_provider"
+  "image_config": {
+    "type": "object",
+    "description": "生图设置",
+    "items": {
+      "enable_image_generation": {
+        "type": "bool",
+        "description": "是否启用生图动作（需已安装 astrbot_plugin_aiimg_enhanced）",
+        "default": true
+      },
+      "image_generation_mode": {
+        "type": "string",
+        "description": "图文顺序：before=先图后文，after=先文后图",
+        "options": ["before", "after"],
+        "default": "before"
+      },
+      "action_pattern": {
+        "type": "string",
+        "description": "自定义动作匹配正则（留空使用内置规则）",
+        "default": ""
+      }
+    }
   },
 
-  "scan_incoming": {
-    "type": "bool",
-    "description": "【用户来消息】是否同时扫描用户发来的消息",
-    "default": false
+  "ai_analysis_config": {
+    "type": "object",
+    "description": "主动消息 AI 分析设置",
+    "items": {
+      "enable_ai_analysis": {
+        "type": "bool",
+        "description": "规则未命中时，用 LLM 判断主动消息是否隐含动作意图，不需要则静默",
+        "default": true
+      },
+      "classifier_provider_id": {
+        "type": "string",
+        "description": "意图分析使用的 LLM Provider（留空使用当前默认 Provider，建议选择轻量快速的模型）",
+        "default": "",
+        "_special": "select_provider"
+      }
+    }
   },
-  "tool_scan_enabled": {
-    "type": "bool",
-    "description": "【用户来消息】动态扫描全部已注册 LLM 工具（实验性，用于用户来消息的 LLM 慢通道）",
-    "default": false
+
+  "incoming_config": {
+    "type": "object",
+    "description": "用户来消息设置",
+    "items": {
+      "scan_incoming": {
+        "type": "bool",
+        "description": "是否同时扫描用户发来的消息",
+        "default": false
+      },
+      "tool_scan_enabled": {
+        "type": "bool",
+        "description": "动态扫描全部已注册 LLM 工具（实验性，用于用户来消息的 LLM 慢通道）",
+        "default": false
+      }
+    }
   }
 }

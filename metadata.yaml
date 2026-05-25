@@ -1,0 +1,5 @@
+name: astrbot_plugin_proactive_action
+desc: "监测所有出站消息（含主动回复插件），自动识别动作指令并执行对应工具（生图、搜索等），实现更丰富的多模态对话体验。"
+version: "1.0.0"
+author: "Justice-ocr"
+homepage: "https://github.com/Justice-ocr/astrbot_plugin_proactive_action"

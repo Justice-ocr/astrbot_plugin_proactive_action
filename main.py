@@ -164,7 +164,10 @@ class ProactiveActionPlugin(star.Star):
             desc = t.get("description", "").strip()
             if len(desc) > 60:
                 desc = desc[:57] + "..."
-            lines.append(f"{i}. {name}\n   {desc}" if desc else f"{i}. {name}")
+            if desc:
+                lines.append(f"{i}. {name}\n    └ {desc}")
+            else:
+                lines.append(f"{i}. {name}")
 
         yield event.plain_result("\n".join(lines))
         event.stop_event()

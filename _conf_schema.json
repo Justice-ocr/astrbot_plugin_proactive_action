@@ -6,7 +6,7 @@
   },
   "classifier_provider_id": {
     "type": "string",
-    "description": "意图分类 LLM Provider ID（留空使用当前默认 Provider）",
+    "description": "意图分类 LLM Provider ID（留空使用当前默认 Provider，建议填写轻量快速的模型）",
     "default": ""
   },
   "enable_image_generation": {
@@ -20,6 +20,11 @@
     "options": ["before", "after"],
     "default": "before"
   },
+  "enable_ai_analysis": {
+    "type": "bool",
+    "description": "是否对主动消息启用 AI 二次分析（规则未命中时，用 LLM 判断消息是否隐含动作意图，不需要则静默）",
+    "default": true
+  },
   "scan_incoming": {
     "type": "bool",
     "description": "是否同时扫描用户发来的消息",
@@ -32,7 +37,7 @@
   },
   "tool_scan_enabled": {
     "type": "bool",
-    "description": "动态扫描全部已注册 LLM 工具（实验性）",
+    "description": "动态扫描全部已注册 LLM 工具（实验性，用于用户来消息的 LLM 慢通道）",
     "default": false
   }
 }

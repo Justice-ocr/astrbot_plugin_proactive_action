@@ -94,12 +94,12 @@ class IntentClassifier:
 
         if source == "bot_outgoing":
             # Bot 出站消息：规则失败后走 AI 二次分析
-            if self.config.get("enable_ai_analysis", True):
+            if self.config.get("ai_analysis_config", {}).get("enable_ai_analysis", True):
                 return await self._ai_analysis_classify(text)
 
         elif source == "incoming":
             # 用户来消息：走原有 LLM 慢通道
-            if self.config.get("tool_scan_enabled", False):
+            if self.config.get("incoming_config", {}).get("tool_scan_enabled", False):
                 return await self._llm_classify(text)
 
         return None
@@ -108,11 +108,11 @@ class IntentClassifier:
 
     def _rule_classify(self, text: str) -> dict | None:
         """基于正则的零延迟规则分类。"""
-        if not self.config.get("enable_image_generation", True):
+        if not self.config.get("image_config", {}).get("enable_image_generation", True):
             return None
 
         # 尝试用户自定义正则
-        custom_pattern = (self.config.get("action_pattern") or "").strip()
+        custom_pattern = (self.config.get("image_config", {}).get("action_pattern") or "").strip()
         if custom_pattern:
             try:
                 m = re.search(custom_pattern, text, re.DOTALL)
@@ -169,7 +169,7 @@ class IntentClassifier:
         不需要动作时静默返回 None，不影响消息发出。
         """
         try:
-            provider_id = (self.config.get("classifier_provider_id") or "").strip()
+            provider_id = (self.config.get("ai_analysis_config", {}).get("classifier_provider_id") or "").strip()
 
             prompt = _AI_ANALYSIS_PROMPT.format(text=text)
 
@@ -226,10 +226,10 @@ class IntentClassifier:
     async def _llm_classify(self, text: str) -> dict | None:
         """用 LLM 做意图分类（慢通道，仅用于用户来消息）。"""
         try:
-            provider_id = (self.config.get("classifier_provider_id") or "").strip()
+            provider_id = (self.config.get("ai_analysis_config", {}).get("classifier_provider_id") or "").strip()
 
             tool_hints = ""
-            if self.config.get("tool_scan_enabled", False):
+            if self.config.get("incoming_config", {}).get("tool_scan_enabled", False):
                 tools = self.tool_registry.get_all_tools()
                 if tools:
                     lines = [f"  - {t['name']}: {t['description'][:60]}" for t in tools[:12]]
